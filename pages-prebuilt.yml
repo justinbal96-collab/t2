@@ -1,0 +1,67 @@
+name: Deploy GitHub Pages (Prebuilt)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-prebuilt
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend bundle
+        run: npm run build
+
+      - name: Stage static site
+        run: |
+          set -euo pipefail
+          mkdir -p _site/dist _site/data
+          cp index.html app.css site-config.js dashboard-fallback.json _site/
+          cp app.js _site/app.js
+          if [ -f app.js.map ]; then
+            cp app.js.map _site/app.js.map
+          fi
+          cp dist/app.js _site/dist/app.js
+          if [ -f dist/app.js.map ]; then
+            cp dist/app.js.map _site/dist/app.js.map
+          fi
+          if [ -d data ]; then
+            cp -R data/. _site/data/
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
